@@ -1,9 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Data penelitian selalu dibaca langsung dari database (dynamic rendering),
+  // jadi Cache Components tidak diaktifkan agar alur kode tetap sederhana.
+  cacheComponents: false,
+  serverExternalPackages: ["exceljs"],
   turbopack: {
     rules: {
       "*.css": {

@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Admin / peneliti yang mengelola data.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("ADMIN")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/// Identitas responden (anonim: nama opsional).
+model Respondent {
+  id               String   @id @default(cuid())
+  /// Nomor urut otomatis, sumber kode RSP-0001, RSP-0002, ...
+  seq              Int      @unique @default(autoincrement())
+  respondentCode   String   @unique
+  name             String?
+  age              Int
+  gender           String
+  university       String
+  faculty          String
+  studyProgram     String
+  semester         Int
+  aiUsageFrequency String
+  platforms        String[]
+  purposes         String[]
+  otherPlatform    String?
+  otherPurpose     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  response          QuestionnaireResponse?
+  clusteringResults ClusteringResult[]
+
+  @@index([university])
+  @@index([studyProgram])
+  @@index([semester])
+}
+
+/// Butir kuesioner (X1..X20). Disimpan di DB agar jawaban fleksibel.
+model Question {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  text       String
+  /// FREQUENCY | TASK_DEPENDENCY | ACADEMIC_USAGE | VERIFICATION | TRUST
+  category   String
+  /// true = butir berarah negatif terhadap ketergantungan (reverse scoring)
+  isReversed Boolean  @default(false)
+  order      Int
+  isActive   Boolean  @default(true)
+  answers    Answer[]
+}
+
+model QuestionnaireResponse {
+  id           String     @id @default(cuid())
+  respondentId String     @unique
+  respondent   Respondent @relation(fields: [respondentId], references: [id], onDelete: Cascade)
+  submittedAt  DateTime   @default(now())
+  answers      Answer[]
+}
+
+model Answer {
+  id         String                @id @default(cuid())
+  responseId String
+  response   QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question              @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  /// Skala Likert 1..5
+  value      Int
+
+  @@unique([responseId, questionId])
+}
+
+model ClusteringRun {
+  id                   String             @id @default(cuid())
+  numberOfClusters     Int
+  silhouetteScore      Float
+  inertia              Float
+  iterations           Int
+  respondentCount      Int
+  /// "typescript" atau "python"
+  engine               String
+  /// Centroid dalam skala fitur asli (1..5), sudah diurutkan sesuai label.
+  centroids            Json
+  /// [{ cluster, label, rank }] hasil mapping centroid -> label
+  clusterLabels        Json
+  scalerMean           Json
+  scalerStd            Json
+  pcaExplainedVariance Json
+  preprocessing        Json
+  isActive             Boolean            @default(true)
+  createdAt            DateTime           @default(now())
+  results              ClusteringResult[]
+}
+
+model ClusteringResult {
+  id                 String        @id @default(cuid())
+  respondentId       String
+  respondent         Respondent    @relation(fields: [respondentId], references: [id], onDelete: Cascade)
+  clusteringRunId    String
+  clusteringRun      ClusteringRun @relation(fields: [clusteringRunId], references: [id], onDelete: Cascade)
+  cluster            Int
+  label              String
+  dependencyScore    Float
+  distanceToCentroid Float
+  /// Nilai 5 fitur hasil agregasi (skala 1..5)
+  features           Json
+  pcaX               Float
+  pcaY               Float
+  createdAt          DateTime      @default(now())
+
+  @@unique([clusteringRunId, respondentId])
+  @@index([respondentId])
+}
